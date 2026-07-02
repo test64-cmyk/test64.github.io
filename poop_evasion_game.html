@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>똥 피하기 게임</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f4f4f9;
+            font-family: 'Malgun Gothic', sans-serif;
+        }
+        h1 {
+            color: #333;
+            margin-top: 20px;
+        }
+        #game-container {
+            position: relative;
+        }
+        canvas {
+            background-color: #87CEEB; /* 하늘색 배경 */
+            border: 3px solid #555;
+            border-radius: 10px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+        #restartBtn {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 15px 30px;
+            font-size: 20px;
+            font-weight: bold;
+            color: white;
+            background-color: #ff4757;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            display: none; /* 기본적으로 숨김 */
+        }
+        #restartBtn:hover {
+            background-color: #ff6b81;
+        }
+        .instructions {
+            margin-top: 15px;
+            font-size: 16px;
+            color: #666;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>똥 피하기 게임 💩</h1>
+    
+    <div id="game-container">
+        <canvas id="gameCanvas" width="400" height="500"></canvas>
+        <button id="restartBtn">다시 하기 🔄</button>
+    </div>
+
+    <div class="instructions">
+        <strong>조작 방법</strong>: 키보드 ⬅️ (왼쪽) / ➡️ (오른쪽) 방향키를 눌러 피하세요!<br>
+        (점수가 높아질수록 똥이 더 자주 떨어집니다)
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const restartBtn = document.getElementById('restartBtn');
+
+        let animationId;
+        let score = 0;
+        let gameOver = false;
+
+        // 🧍 플레이어 객체 설정
+        const player = {
+            x: 180,
+            y: 450,
+            width: 40,
+            height: 40,
+            speed: 6,
+            dx: 0
+        };
+
+        // 💩 장애물(똥) 배열
+        let poops = [];
+
+        // ⌨️ 키보드 이벤트 리스너
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft') player.dx = -player.speed;
+            if (e.key === 'ArrowRight') player.dx = player.speed;
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') player.dx = 0;
+        });
+
+        // 💩 똥 생성 함수
+        function createPoop() {
+            const size = Math.random() * 15 + 10; // 크기: 10 ~ 25
+            const x = Math.random() * (canvas.width - size * 2) + size; // 화면 안에서 생성
+            const speed = Math.random() * 4 + 3; // 떨어지는 속도: 3 ~ 7
+            poops.push({ x, y: -size, size, speed });
+        }
+
+        // 🎨 플레이어 그리기
+        function drawPlayer() {
+            ctx.fillStyle = '#3498db'; // 캐릭터 몸통
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+            
+            // 귀여운 눈 그리기 👀
+            ctx.fillStyle = 'white';
+            ctx.fillRect(player.x + 8, player.y + 8, 10, 10);
+            ctx.fillRect(player.x + 22, player.y + 8, 10, 10);
+            
+            ctx.fillStyle = 'black';
+            ctx.fillRect(player.x + 12, player.y + 12, 4, 4);
+            ctx.fillRect(player.x + 26, player.y + 12, 4, 4);
+        }
+
+        // 🎨 똥 그리기
+        function drawPoops() {
+            ctx.fillStyle = '#8B4513'; // 갈색
+            poops.forEach(poop => {
+                ctx.beginPath();
+                ctx.arc(poop.x, poop.y, poop.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.closePath();
+            });
+        }
+
+        // 💯 점수 표시
+        function drawScore() {
+            ctx.fillStyle = '#333';
+            ctx.font = 'bold 22px Malgun Gothic';
+            ctx.fillText(`점수: ${score}`, 15, 35);
+        }
+
+        // 💥 충돌 감지 (원과 사각형의 충돌 판정)
+        function checkCollision(poop) {
+            const distX = Math.abs(poop.x - player.x - player.width / 2);
+            const distY = Math.abs(poop.y - player.y - player.height / 2);
+
+            if (distX > (player.width / 2 + poop.size)) return false;
+            if (distY > (player.height / 2 + poop.size)) return false;
+
+            if (distX <= (player.width / 2)) return true;
+            if (distY <= (player.height / 2)) return true;
+
+            const dx = distX - player.width / 2;
+            const dy = distY - player.height / 2;
+            return (dx * dx + dy * dy <= (poop.size * poop.size));
+        }
+
+        // ⚙️ 게임 핵심 루프
+        function update() {
+            if (gameOver) return;
+
+            // 화면 초기화
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 플레이어 이동 및 벽 충돌 방지
+            player.x += player.dx;
+            if (player.x < 0) player.x = 0;
+            if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+
+            // 똥 이동 및 판정
+            for (let i = 0; i < poops.length; i++) {
+                let poop = poops[i];
+                poop.y += poop.speed;
+
+                // 충돌 시 게임 오버 처리
+                if (checkCollision(poop)) {
+                    gameOver = true;
+                    restartBtn.style.display = 'block';
+                    
+                    // 게임 오버 연출
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.fillStyle = '#ff4757';
+                    ctx.font = 'bold 40px Malgun Gothic';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('GAME OVER!', canvas.width / 2, canvas.height / 2 - 40);
+                    return;
+                }
+
+                // 바닥에 닿으면 똥을 제거하고 점수 획득
+                if (poop.y - poop.size > canvas.height) {
+                    poops.splice(i, 1);
+                    score += 10; // 똥 1개 피할 때마다 10점
+                    i--;
+                }
+            }
+
+            // 난이도 조절: 점수가 오를수록 더 자주 생성됨
+            let spawnRate = 0.03 + (score * 0.0001);
+            if (Math.random() < spawnRate) {
+                createPoop();
+            }
+
+            // 요소 그리기
+            drawPlayer();
+            drawPoops();
+            drawScore();
+
+            // 다음 프레임 호출
+            animationId = requestAnimationFrame(update);
+        }
+
+        // 🔄 게임 초기화
+        function init() {
+            poops = [];
+            score = 0;
+            gameOver = false;
+            player.x = 180;
+            player.dx = 0;
+            
+            restartBtn.style.display = 'none';
+            ctx.textAlign = 'left'; // 텍스트 정렬 복구
+            
+            cancelAnimationFrame(animationId);
+            update(); // 게임 루프 시작
+        }
+
+        // 버튼 클릭 이벤트
+        restartBtn.addEventListener('click', init);
+
+        // 최초 실행
+        init();
+    </script>
+</body>
+</html>
